@@ -19,8 +19,8 @@ from ..lib.api import api_request
 
 logger = logging.getLogger("nonebot")
 
-user_bind = on_command("终末地绑定", aliases={"endfield绑定", "终末地扫码绑定"}, rule=to_me())
-switch_bind = on_command("终末地切换账号", aliases={"endfield切换账号", "终末地账号切换"}, rule=to_me())
+user_bind = on_command("终末地绑定", aliases={"endfield绑定", "终末地扫码绑定"})
+switch_bind = on_command("终末地切换账号", aliases={"endfield切换账号", "终末地账号切换"})
 
 TABLE_NAME = "endfield_bindings_v3"
 

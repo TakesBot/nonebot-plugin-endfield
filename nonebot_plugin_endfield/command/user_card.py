@@ -25,7 +25,7 @@ from .user_bind import TABLE_NAME, _get_db_path
 
 logger = logging.getLogger("nonebot")
 
-user_card = on_command("终末地信息卡", aliases={"终末地名片", "终末地卡片", "endfield信息卡"}, rule=to_me())
+user_card = on_command("终末地信息卡", aliases={"终末地名片", "终末地卡片", "endfield信息卡"})
 
 
 def _get_api_key() -> Optional[str]:
