@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import sqlite3
@@ -6,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 from nonebot import get_driver, on_command
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
@@ -23,6 +25,39 @@ user_bind = on_command("终末地绑定", aliases={"endfield绑定", "终末地�
 switch_bind = on_command("终末地切换账号", aliases={"endfield切换账号", "终末地账号切换"})
 
 TABLE_NAME = "endfield_bindings_v3"
+
+
+def _normalize_qrcode_for_onebot_image(qrcode: Any) -> Optional[str]:
+    if qrcode is None:
+        return None
+
+    raw = str(qrcode).strip()
+    if not raw:
+        return None
+
+    if raw.startswith("base64://"):
+        return raw
+
+    if raw.startswith("data:image") and "," in raw:
+        b64_data = raw.split(",", 1)[1].strip()
+        return f"base64://{b64_data}" if b64_data else None
+
+    b64_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
+    if len(raw) > 200 and all(ch in b64_chars for ch in raw):
+        normalized = raw.replace("\n", "").replace("\r", "")
+        return f"base64://{normalized}"
+
+    if raw.startswith("http://") or raw.startswith("https://"):
+        try:
+            response = httpx.get(raw, timeout=10.0)
+            response.raise_for_status()
+            b64 = base64.b64encode(response.content).decode("utf-8")
+            return f"base64://{b64}"
+        except Exception as e:
+            logger.warning(f"download qrcode failed: {e}")
+            return None
+
+    return None
 
 
 def _format_expire_time(raw_expire: Any) -> Optional[str]:
@@ -341,6 +376,7 @@ async def handle_user_bind(bot: Bot, event: Event):
     qrcode = qr_payload.get("qrcode")
     qr_expire = qr_payload.get("expire")
     qr_expire_text = _format_expire_time(qr_expire)
+    qrcode_image = _normalize_qrcode_for_onebot_image(qrcode)
 
     if not framework_token or not qrcode:
         await user_bind.finish("二维码返回数据异常，请稍后重试。")
@@ -349,9 +385,10 @@ async def handle_user_bind(bot: Bot, event: Event):
     binding_info_msg_id: Optional[int] = None
 
     try:
+        qr_segment = MessageSegment.image(qrcode_image) if qrcode_image else MessageSegment.text(str(qrcode))
         qr_message = (
             MessageSegment.text("请在森空岛扫码确认登录\n")
-            + MessageSegment.image(str(qrcode))
+            + qr_segment
             + MessageSegment.text(f"\n失效时间：{qr_expire_text if qr_expire_text else '请尽快扫码'}")
         )
         qr_send_result = await bot.send(event=event, message=Message(qr_message))
@@ -359,7 +396,7 @@ async def handle_user_bind(bot: Bot, event: Event):
     except Exception:
         qr_send_result = await bot.send(
             event=event,
-            message=f"请扫码登录：<img src=\"{qrcode}\"/>\n失效时间：{qr_expire_text if qr_expire_text else '请尽快扫码'}",
+            message=f"请扫码登录：{qrcode}\n失效时间：{qr_expire_text if qr_expire_text else '请尽快扫码'}",
         )
         qr_msg_id = _extract_message_id(qr_send_result)
 
