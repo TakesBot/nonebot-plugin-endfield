@@ -77,8 +77,8 @@ async def handle_user_signin(event: Event) -> None:
 		return
 
 	headers = {
-		"x-framework-token": api_key,
-		"x-api-key": binding["framework_token"],
+		"x-api-key": api_key,
+		"x-framework-token": binding["framework_token"],
 	}
 	result = api_request("POST", "/api/endfield/attendance", headers=headers)
 	if isinstance(result, dict) and result.get("code") == 0:
