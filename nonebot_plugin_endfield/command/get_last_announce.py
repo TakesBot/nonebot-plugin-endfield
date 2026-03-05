@@ -9,7 +9,7 @@ from ..lib.api import api_request
 from ..lib.render import render_announce_data_image
 
 
-get_last_announce = on_command("终末地公告", rule=to_me())
+get_last_announce = on_command("终末地公告")
 
 
 @get_last_announce.handle()
