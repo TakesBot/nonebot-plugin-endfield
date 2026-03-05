@@ -266,10 +266,9 @@ def _render_column(
 	yellow_threshold: int,
 	pink_threshold: int,
 ) -> Image.Image:
-	bar_h = 12
-	bar_gap = 6
-	bar_left = 12
-	bar_right = width - 12
+	segment_w = 8
+	segment_h = 18
+	segment_gap = 2
 
 	def _bar_color(cumulative: int) -> str:
 		if cumulative >= pink_threshold:
@@ -278,7 +277,7 @@ def _render_column(
 			return "#eab308"
 		return "#22c55e"
 
-	tmp_h = 220 + max(1, len(records)) * (bar_h + bar_gap + 2)
+	tmp_h = 240 + max(1, len(records)) * 26
 	img = Image.new("RGB", (width, tmp_h), bg)
 	draw = ImageDraw.Draw(img)
 
@@ -300,25 +299,44 @@ def _render_column(
 	row_top = y
 	cumulative = 0
 	for idx, rec in enumerate(normal_records):
-		_ = idx
-		_ = rec
+		rarity = _safe_int(rec.get("rarity"), 4)
 		cumulative += 1
-		draw.rectangle((bar_left, row_top, bar_right, row_top + bar_h), fill=_bar_color(cumulative))
-		row_top += bar_h + bar_gap
+		draw.rectangle((x, row_top, x + segment_w, row_top + segment_h), fill=_bar_color(cumulative))
+
+		is_last = idx == len(normal_records) - 1
+		if rarity >= 6 and not is_last:
+			x = 12
+			row_top += segment_h + 8
+			continue
+
+		x += segment_w + segment_gap
+		if x + segment_w >= width - 10 and not is_last:
+			x = 12
+			row_top += segment_h + 8
 
 	if free_records:
 		if normal_records:
-			row_top += 4
+			row_top += segment_h + 8
 		draw.text((12, row_top), "免费十连", fill="#2563eb", font=text_font)
 		row_top += 22
+		x = 12
 		for idx, rec in enumerate(free_records):
-			_ = idx
-			_ = rec
+			rarity = _safe_int(rec.get("rarity"), 4)
 			cumulative += 1
-			draw.rectangle((bar_left, row_top, bar_right, row_top + bar_h), fill=_bar_color(cumulative))
-			row_top += bar_h + bar_gap
+			draw.rectangle((x, row_top, x + segment_w, row_top + segment_h), fill=_bar_color(cumulative))
 
-	y = row_top + 10
+			is_last = idx == len(free_records) - 1
+			if rarity >= 6 and not is_last:
+				x = 12
+				row_top += segment_h + 8
+				continue
+
+			x += segment_w + segment_gap
+			if x + segment_w >= width - 10 and not is_last:
+				x = 12
+				row_top += segment_h + 8
+
+	y = row_top + segment_h + 16
 	return img.crop((0, 0, width, max(120, y + 4)))
 
 
