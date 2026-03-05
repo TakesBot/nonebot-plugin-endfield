@@ -393,7 +393,6 @@ async def handle_user_bind(bot: Bot, event: Event):
         await user_bind.finish("二维码返回数据异常，请稍后重试。")
 
     qr_msg_id: Optional[int] = None
-    binding_info_msg_id: Optional[int] = None
 
     try:
         qr_segment = MessageSegment.image(qrcode_image) if qrcode_image else MessageSegment.text(str(qrcode))
@@ -456,9 +455,6 @@ async def handle_user_bind(bot: Bot, event: Event):
         await _safe_delete_msg(bot, qr_msg_id)
         await user_bind.finish("等待扫码超时，请重新发送绑定命令。")
 
-    bind_msg_ret = await bot.send(event=event, message="正在获取绑定信息…")
-    binding_info_msg_id = _extract_message_id(bind_msg_ret)
-
     binding_record_id = None
     binding_record_data = api_request(
         "POST",
@@ -488,21 +484,18 @@ async def handle_user_bind(bot: Bot, event: Event):
     )
     if not isinstance(binding_data, dict) or binding_data.get("code") != 0:
         await _safe_delete_msg(bot, qr_msg_id)
-        await _safe_delete_msg(bot, binding_info_msg_id)
         await user_bind.finish("获取绑定信息失败，请稍后重试。")
 
     binding_payload = binding_data.get("data") if isinstance(binding_data.get("data"), dict) else {}
     binding_list = binding_payload.get("bindingList") if isinstance(binding_payload.get("bindingList"), list) else []
     if not binding_list:
         await _safe_delete_msg(bot, qr_msg_id)
-        await _safe_delete_msg(bot, binding_info_msg_id)
         await user_bind.finish("未查询到绑定角色信息。")
 
     first_item = binding_list[0] if isinstance(binding_list[0], dict) else {}
     default_role = first_item.get("defaultRole") if isinstance(first_item.get("defaultRole"), dict) else {}
     if not default_role:
         await _safe_delete_msg(bot, qr_msg_id)
-        await _safe_delete_msg(bot, binding_info_msg_id)
         await user_bind.finish("未查询到默认角色信息。")
 
     role_id = default_role.get("roleId")
@@ -528,7 +521,6 @@ async def handle_user_bind(bot: Bot, event: Event):
     )
 
     await _safe_delete_msg(bot, qr_msg_id)
-    await _safe_delete_msg(bot, binding_info_msg_id)
 
     await user_bind.finish(f"绑定成功\n角色：{nickname}\nUID：{role_id}\n服务器：{channelName}\n等级：{level}")
 
