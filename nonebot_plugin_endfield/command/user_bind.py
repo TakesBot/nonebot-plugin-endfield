@@ -128,6 +128,7 @@ def _create_latest_schema(conn: sqlite3.Connection) -> None:
             framework_token TEXT NOT NULL,
             user_info TEXT NOT NULL,
             binding_info TEXT NOT NULL,
+            binding_id TEXT,
             role_id TEXT,
             server_id TEXT,
             is_active INTEGER NOT NULL DEFAULT 0,
@@ -171,10 +172,12 @@ def _migrate_legacy_table(conn: sqlite3.Connection, existing_columns: set[str]) 
 
     for row in rows:
         user_id, framework_token, user_info, binding_info_raw, expires_at, updated_at = row
+        binding_id = None
         role_id = None
         server_id = None
         try:
             binding_info_obj = json.loads(binding_info_raw) if binding_info_raw else {}
+            binding_id = binding_info_obj.get("id")
             role_id = binding_info_obj.get("roleId")
             server_id = binding_info_obj.get("serverId")
         except Exception:
@@ -183,14 +186,15 @@ def _migrate_legacy_table(conn: sqlite3.Connection, existing_columns: set[str]) 
         conn.execute(
             f"""
             INSERT INTO {TABLE_NAME}
-            (user_id, framework_token, user_info, binding_info, role_id, server_id, is_active, expires_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+            (user_id, framework_token, user_info, binding_info, binding_id, role_id, server_id, is_active, expires_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
             """,
             (
                 str(user_id),
                 str(framework_token),
                 str(user_info),
                 str(binding_info_raw),
+                str(binding_id) if binding_id is not None else None,
                 str(role_id) if role_id is not None else None,
                 str(server_id) if server_id is not None else None,
                 str(expires_at) if expires_at is not None else None,
@@ -241,6 +245,7 @@ def _ensure_table() -> None:
             "framework_token",
             "user_info",
             "binding_info",
+            "binding_id",
             "role_id",
             "server_id",
             "is_active",
@@ -259,6 +264,7 @@ def _ensure_table() -> None:
 def _save_binding(
     user_id: str,
     framework_token: str,
+    binding_id: Any,
     role_id: Any,
     server_id: Any,
     nickname: str,
@@ -269,12 +275,14 @@ def _save_binding(
     db_path = _get_db_path()
     user_info = {"nickname": nickname}
     binding_info = {
+        "id": binding_id,
         "roleId": role_id,
         "serverId": server_id,
         "nickname": nickname,
         "level": level,
     }
     now = datetime.now().isoformat()
+    binding_id_str = str(binding_id) if binding_id is not None else None
     role_id_str = str(role_id) if role_id is not None else None
     server_id_str = str(server_id) if server_id is not None else None
 
@@ -283,12 +291,13 @@ def _save_binding(
         conn.execute(
             f"""
             INSERT INTO {TABLE_NAME}
-            (user_id, framework_token, user_info, binding_info, role_id, server_id, is_active, expires_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                        (user_id, framework_token, user_info, binding_info, binding_id, role_id, server_id, is_active, expires_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             ON CONFLICT(user_id, role_id, server_id) DO UPDATE SET
               framework_token = excluded.framework_token,
               user_info = excluded.user_info,
               binding_info = excluded.binding_info,
+                            binding_id = excluded.binding_id,
               role_id = excluded.role_id,
               server_id = excluded.server_id,
               is_active = 1,
@@ -300,6 +309,7 @@ def _save_binding(
                 framework_token,
                 json.dumps(user_info, ensure_ascii=False),
                 json.dumps(binding_info, ensure_ascii=False),
+                binding_id_str,
                 role_id_str,
                 server_id_str,
                 expires_at,
@@ -316,7 +326,7 @@ def _list_bindings(user_id: str) -> list[dict[str, Any]]:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             f"""
-            SELECT id, role_id, server_id, binding_info, framework_token, is_active, updated_at
+            SELECT id, binding_id, role_id, server_id, binding_info, framework_token, is_active, updated_at
             FROM {TABLE_NAME}
             WHERE user_id = ?
             ORDER BY is_active DESC, updated_at DESC, id DESC
@@ -335,6 +345,7 @@ def _list_bindings(user_id: str) -> list[dict[str, Any]]:
         result.append(
             {
                 "id": row["id"],
+                "binding_id": row["binding_id"] or binding_info.get("id"),
                 "role_id": row["role_id"] or binding_info.get("roleId"),
                 "server_id": row["server_id"] or binding_info.get("serverId"),
                 "nickname": binding_info.get("nickname") or "未知角色",
@@ -448,6 +459,25 @@ async def handle_user_bind(bot: Bot, event: Event):
     bind_msg_ret = await bot.send(event=event, message="正在获取绑定信息…")
     binding_info_msg_id = _extract_message_id(bind_msg_ret)
 
+    binding_record_id = None
+    binding_record_data = api_request(
+        "POST",
+        "/api/v1/bindings",
+        headers={
+            "X-API-Key": api_key,
+            "Content-Type": "application/json",
+        },
+        data={
+            "framework_token": final_framework_token,
+            "user_identifier": str(event.get_user_id()),
+        },
+    )
+    if isinstance(binding_record_data, dict) and binding_record_data.get("code") == 0:
+        payload = binding_record_data.get("data") if isinstance(binding_record_data.get("data"), dict) else {}
+        binding_record_id = payload.get("id")
+    else:
+        logger.warning("create binding record failed, continue with original binding flow")
+
     binding_data = api_request(
         "GET",
         "/api/endfield/binding",
@@ -489,6 +519,7 @@ async def handle_user_bind(bot: Bot, event: Event):
     _save_binding(
         user_id=str(event.get_user_id()),
         framework_token=final_framework_token,
+        binding_id=binding_record_id,
         role_id=role_id,
         server_id=server_id,
         nickname=nickname,
