@@ -1,11 +1,69 @@
 import io
 import json
+import logging
 import os
+import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import httpx
 from PIL import Image, ImageDraw, ImageFont
+
+
+logger = logging.getLogger("nonebot")
+
+_FONT_INIT_LOCK = threading.Lock()
+_FONT_INIT_DONE = False
+_FALLBACK_FONT_FILES = {
+    "regular": (
+        "NotoSansCJKsc-Regular.otf",
+        "https://gh-proxy.org/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+    ),
+    "bold": (
+        "NotoSansCJKsc-Bold.otf",
+        "https://gh-proxy.org/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf",
+    ),
+}
+
+
+def _get_font_cache_dir() -> Path:
+    return Path(__file__).resolve().parent / "fonts"
+
+
+def _get_fallback_font_candidates(bold: bool) -> list[Path]:
+    font_dir = _get_font_cache_dir()
+    regular_name, _ = _FALLBACK_FONT_FILES["regular"]
+    bold_name, _ = _FALLBACK_FONT_FILES["bold"]
+    if bold:
+        return [font_dir / bold_name, font_dir / regular_name]
+    return [font_dir / regular_name, font_dir / bold_name]
+
+
+def _ensure_fallback_fonts() -> None:
+    global _FONT_INIT_DONE
+    if _FONT_INIT_DONE:
+        return
+
+    with _FONT_INIT_LOCK:
+        if _FONT_INIT_DONE:
+            return
+
+        font_dir = _get_font_cache_dir()
+        font_dir.mkdir(parents=True, exist_ok=True)
+
+        for _, (filename, url) in _FALLBACK_FONT_FILES.items():
+            font_path = font_dir / filename
+            if font_path.exists() and font_path.stat().st_size > 1024:
+                continue
+            try:
+                response = httpx.get(url, timeout=20.0)
+                response.raise_for_status()
+                font_path.write_bytes(response.content)
+            except Exception as e:
+                logger.warning(f"fallback font download failed: {filename}, error={e}")
+
+        _FONT_INIT_DONE = True
 
 
 def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -19,6 +77,14 @@ def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if os.path.exists(path):
             try:
                 return ImageFont.truetype(path, size=size)
+            except Exception:
+                continue
+
+    _ensure_fallback_fonts()
+    for path in _get_fallback_font_candidates(bold=False):
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size=size)
             except Exception:
                 continue
     return ImageFont.load_default()
@@ -37,6 +103,14 @@ def _pick_bold_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if os.path.exists(path):
             try:
                 return ImageFont.truetype(path, size=size)
+            except Exception:
+                continue
+
+    _ensure_fallback_fonts()
+    for path in _get_fallback_font_candidates(bold=True):
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size=size)
             except Exception:
                 continue
     return ImageFont.load_default()
