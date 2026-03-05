@@ -244,7 +244,7 @@ def _fetch_all_gacha_records(api_key: str, framework_token: str) -> tuple[list[d
 		page_records = page_data.get("records") if isinstance(page_data.get("records"), list) else []
 		all_records.extend([r for r in page_records if isinstance(r, dict)])
 
-	all_records.sort(key=lambda item: _safe_int(item.get("gacha_ts"), 0))
+	all_records.sort(key=lambda item: _safe_int(item.get("gacha_ts"), 0), reverse=True)
 	return all_records, data
 
 
@@ -277,10 +277,20 @@ def _render_column(
 		x = 12
 		row_top = y
 		for idx, rec in enumerate(records):
+			is_free = str(rec.get("is_free") or "").lower() == "true"
+			if is_free and x != 12:
+				x = 12
+				row_top += segment_h + 8
+
 			rarity = _safe_int(rec.get("rarity"), 4)
 			draw.rectangle((x, row_top, x + segment_w, row_top + segment_h), fill=_rarity_color(rarity))
 
 			is_last = idx == len(records) - 1
+			if is_free and not is_last:
+				x = 12
+				row_top += segment_h + 8
+				continue
+
 			if rarity >= 6 and not is_last:
 				x = 12
 				row_top += segment_h + 8
