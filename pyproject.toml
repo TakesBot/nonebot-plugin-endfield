@@ -35,4 +35,5 @@ dependencies = [
 "Bug Tracker" = "https://github.com/TakesBot/nonebot-plugin-endfield/issues"
 
 [project.entry-points."nonebot.plugin"]
-endfield = "nonebot_plugin_endfield"
+endfield = "endfield"
+nonebot_plugin_endfield = "nonebot_plugin_endfield"

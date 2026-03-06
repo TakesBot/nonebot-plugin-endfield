@@ -1,0 +1,2 @@
+from nonebot_plugin_endfield import __plugin_meta__
+from nonebot_plugin_endfield import *
