@@ -527,32 +527,42 @@ def render_gacha_analysis_image(stats_data: Dict[str, Any], cache_data: Dict[str
             grouped.setdefault(pool_name, []).append(row)
         return grouped
 
-    def _build_timeline_rows(rows: List[Dict[str, Any]], *, max_pity: int) -> Dict[str, Any]:
+    def _build_timeline_rows(
+        rows: List[Dict[str, Any]],
+        *,
+        max_pity: int,
+        initial_paid_pity: int = 0,
+        include_tail_pity: bool = True,
+    ) -> Dict[str, Any]:
         sorted_rows = _sort_record_rows(rows)  # 旧 -> 新
         paid_rows = [row for row in sorted_rows if not _to_bool(row.get("is_free"))]
         free_rows = [row for row in sorted_rows if _to_bool(row.get("is_free"))]
 
-        def _segment_timeline(source_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def _segment_timeline(source_rows: List[Dict[str, Any]], *, initial_count: int = 0, include_tail: bool = True) -> Tuple[List[Dict[str, Any]], int]:
             # 每抽+1；出6星时换行并重置
             segments: List[Dict[str, Any]] = []
-            count = 0
+            count = max(0, int(initial_count))
             for row in source_rows:
                 count += 1
                 if _to_int(row.get("rarity")) == 6:
                     name = str(row.get("char_name") or row.get("item_name") or "6星")
                     segments.append({"count": count, "name": name, "is_pity": False})
                     count = 0
-            if count > 0:
+            if include_tail and count > 0:
                 segments.append({"count": count, "name": "已垫", "is_pity": True})
-            return segments
+            return segments, count
 
-        timeline_old_to_new = _segment_timeline(paid_rows)
+        timeline_old_to_new, paid_tail_pity = _segment_timeline(
+            paid_rows,
+            initial_count=initial_paid_pity,
+            include_tail=include_tail_pity,
+        )
 
         # 画图从上到下，故反转后满足“旧->新从下往上”
         timeline_for_draw = list(reversed(timeline_old_to_new))
 
         # 免费抽卡与付费段共用同一分段逻辑，确保免费出6星也换行
-        free_timeline_old_to_new = _segment_timeline(free_rows)
+        free_timeline_old_to_new, _ = _segment_timeline(free_rows)
         free_timeline_for_draw = list(reversed(free_timeline_old_to_new))
 
         def _ts(v: Dict[str, Any]) -> int:
@@ -569,17 +579,37 @@ def render_gacha_analysis_image(stats_data: Dict[str, Any], cache_data: Dict[str
             "free_timeline": free_timeline_for_draw,
             "max_pity": max_pity,
             "sort_ts": pool_sort_ts,
+            "paid_tail_pity": paid_tail_pity,
         }
 
-    def _build_pool_cards(pool_key: str, max_pity: int) -> List[Dict[str, Any]]:
+    def _build_pool_cards(pool_key: str, max_pity: int, *, shared_paid_pity: bool = False) -> List[Dict[str, Any]]:
         rows = records_by_pool.get(pool_key)
         if not isinstance(rows, list):
             return []
         grouped = _group_pool_rows(rows)
-        cards: List[Dict[str, Any]] = []
-        for pool_name, pool_rows in grouped.items():
-            timeline_data = _build_timeline_rows(pool_rows, max_pity=max_pity)
-            cards.append(
+        grouped_items = list(grouped.items())
+
+        def _pool_sort_ts(pool_rows: List[Dict[str, Any]]) -> int:
+            try:
+                return min(int((row or {}).get("gacha_ts") or 0) for row in pool_rows)
+            except Exception:
+                return 0
+
+        # 共享保底的池子（如限定池）按时间正序串联计算，确保上一个池子的垫数会继承到下一个池子
+        grouped_items.sort(key=lambda item: (_pool_sort_ts(item[1]), item[0]))
+
+        cards_chrono: List[Dict[str, Any]] = []
+        carry_paid_pity = 0
+        last_index = len(grouped_items) - 1
+        for idx, (pool_name, pool_rows) in enumerate(grouped_items):
+            include_tail = True if (not shared_paid_pity or idx == last_index) else False
+            timeline_data = _build_timeline_rows(
+                pool_rows,
+                max_pity=max_pity,
+                initial_paid_pity=(carry_paid_pity if shared_paid_pity else 0),
+                include_tail_pity=include_tail,
+            )
+            cards_chrono.append(
                 {
                     "pool_name": pool_name,
                     "timeline": timeline_data["timeline"],
@@ -590,11 +620,13 @@ def render_gacha_analysis_image(stats_data: Dict[str, Any], cache_data: Dict[str
                     "sort_ts": timeline_data["sort_ts"],
                 }
             )
+            if shared_paid_pity:
+                carry_paid_pity = _to_int(timeline_data.get("paid_tail_pity"))
         # 最新卡池在上（时间倒序）
-        cards.sort(key=lambda x: (-(x.get("sort_ts") or 0), x["pool_name"]))
-        return cards
+        cards_chrono.sort(key=lambda x: (-(x.get("sort_ts") or 0), x["pool_name"]))
+        return cards_chrono
 
-    limited_cards = _build_pool_cards("limited", 120)
+    limited_cards = _build_pool_cards("limited", 120, shared_paid_pity=True)
     weapon_cards = _build_pool_cards("weapon", 40)
     standard_cards = _build_pool_cards("standard", 80) + _build_pool_cards("beginner", 80)
 
