@@ -2,6 +2,7 @@ import io
 import json
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -219,6 +220,62 @@ def _format_publish_time(ts: Any) -> str:
     except Exception:
         return "未知"
 
+
+def _truncate_image_middle_with_fade(source: Image.Image, max_height: int = 2200, fade_height: int = 96) -> Image.Image:
+    if source.height <= max_height or max_height <= 0:
+        return source
+
+    width, height = source.size
+    keep_top = max_height // 2
+    keep_bottom = max_height - keep_top
+
+    top = source.crop((0, 0, width, keep_top))
+    bottom = source.crop((0, height - keep_bottom, width, height))
+
+    merged = Image.new("RGB", (width, max_height), "white")
+    merged.paste(top, (0, 0))
+    merged.paste(bottom, (0, keep_top))
+
+    fade = max(8, min(fade_height, keep_top, keep_bottom))
+    seam = keep_top
+
+    merged_rgba = merged.convert("RGBA")
+    fade_draw = ImageDraw.Draw(merged_rgba, "RGBA")
+
+    # 上半段靠近截断处渐隐到白（加重）
+    for i in range(fade):
+        alpha = int(220 * (i + 1) / fade)
+        y = seam - fade + i
+        fade_draw.line((0, y, width, y), fill=(255, 255, 255, alpha))
+
+    # 下半段从白渐显回图片（加重）
+    for i in range(fade):
+        alpha = int(220 * (1 - (i / fade)))
+        y = seam + i
+        fade_draw.line((0, y, width, y), fill=(255, 255, 255, alpha))
+
+    # 中间叠一条明显的白色过渡带，强化“截断”视觉
+    band_h = max(18, fade // 2)
+    fade_draw.rectangle((0, seam - band_h // 2, width, seam + band_h // 2), fill=(255, 255, 255, 230))
+
+    merged_rgb = merged_rgba.convert("RGB")
+    draw = ImageDraw.Draw(merged_rgb)
+
+    # 分隔线 + 提示文字，避免肉眼感知不明显
+    line_y = seam
+    margin = 26
+    text = "中部内容已折叠"
+    hint_font = _pick_font(18)
+    text_w = int(draw.textlength(text, font=hint_font))
+    text_pad = 14
+    left_end = max(margin, (width - text_w) // 2 - text_pad)
+    right_start = min(width - margin, (width + text_w) // 2 + text_pad)
+    draw.line((margin, line_y, left_end, line_y), fill="#d1d5db", width=2)
+    draw.line((right_start, line_y, width - margin, line_y), fill="#d1d5db", width=2)
+    draw.text(((width - text_w) // 2, line_y - 12), text, fill="#6b7280", font=hint_font)
+
+    return merged_rgb
+
 def render_announce_data_image(payload: Dict[str, Any]) -> bytes:
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
@@ -248,6 +305,20 @@ def render_announce_data_image(payload: Dict[str, Any]) -> bytes:
     prepared_blocks: List[Dict[str, Any]] = []
     total_height = padding + title_height
 
+    image_urls = [str(block.get("url") or "").strip() for block in blocks if block.get("type") == "image"]
+    unique_image_urls = [u for u in dict.fromkeys(image_urls) if u]
+    prefetched_images: Dict[str, Image.Image | None] = {}
+    if unique_image_urls:
+        worker_count = min(6, max(1, len(unique_image_urls)))
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_map = {executor.submit(_download_image, url): url for url in unique_image_urls}
+            for future in as_completed(future_map):
+                url = future_map[future]
+                try:
+                    prefetched_images[url] = future.result()
+                except Exception:
+                    prefetched_images[url] = None
+
     for block in blocks:
         if block.get("type") == "text":
             text = str(block.get("text") or "")
@@ -258,7 +329,10 @@ def render_announce_data_image(payload: Dict[str, Any]) -> bytes:
             continue
 
         if block.get("type") == "image":
-            image = _download_image(str(block.get("url") or ""))
+            block_url = str(block.get("url") or "").strip()
+            image = prefetched_images.get(block_url)
+            if image is None and block_url:
+                image = _download_image(block_url)
             if image is None:
                 fallback = ["[图片加载失败]"]
                 block_height = line_height
@@ -270,6 +344,8 @@ def render_announce_data_image(payload: Dict[str, Any]) -> bytes:
             resized_width = int(image.width * scale)
             resized_height = int(image.height * scale)
             resized = image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+            resized = _truncate_image_middle_with_fade(resized, max_height=2200, fade_height=96)
+            resized_height = resized.height
             prepared_blocks.append({"type": "image", "image": resized, "height": resized_height})
             total_height += resized_height + block_gap
 

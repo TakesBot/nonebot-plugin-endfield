@@ -5,6 +5,19 @@ from nonebot import get_driver, logger
 from ..config import Config
 
 
+_HTTP_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None:
+        _HTTP_CLIENT = httpx.AsyncClient(
+            timeout=10.0,
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+        )
+    return _HTTP_CLIENT
+
+
 def _build_url(path: str) -> str:
     driver = get_driver()
     base = getattr(driver.config, "endfield_api_baseurl", None)
@@ -32,10 +45,10 @@ async def api_request(
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.request(method, url, headers=headers, json=data)
-            response.raise_for_status()
-            return response.json()
+        client = _get_http_client()
+        response = await client.request(method, url, headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
         logger.warning(f"HTTP error occurred: {e}")
         return None
