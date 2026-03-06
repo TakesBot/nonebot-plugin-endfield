@@ -10,9 +10,6 @@ def _build_url(path: str) -> str:
     base = getattr(driver.config, "endfield_api_baseurl", None)
     if not base:
         default_base = Config().endfield_api_baseurl
-        logger.info(
-            f"endfield_api_baseurl not set in driver.config, using default from config.py: {default_base!r}"
-        )
         base = default_base
     if path.startswith("http://") or path.startswith("https://"):
         return path
