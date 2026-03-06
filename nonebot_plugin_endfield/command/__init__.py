@@ -1,4 +1,5 @@
 # from .health_check import *
+from .help import *
 from .get_last_announce import *
 from .gacha_analysis import *
 from .user_bind import *
