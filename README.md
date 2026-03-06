@@ -97,6 +97,11 @@ endfield_api_baseurl=https://end-api.shallow.ink/
 - 若提示 API 请求失败，请优先检查 `endfield_api_key` 与 `endfield_api_baseurl`。
 - 本插件依赖外部终末地 API 服务，服务可用性会直接影响功能。
 
+## 其他框架插件
+
+- **云崽**：[endfield-plugin](https://github.com/Entropy-Increase-Team/endfield-plugin)
+- **Astrbot**：[astrbot_plugin_endfield](https://github.com/Entropy-Increase-Team/astrbot_plugin_endfield)
+
 ## 许可证
 
 [AGPL v3](./LICENSE)
