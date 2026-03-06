@@ -1,13 +1,12 @@
 import asyncio
 import base64
 import json
-import logging
 import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Optional
 
-from nonebot import get_driver, on_command, on_message
+from nonebot import get_driver, on_command, on_message, logger
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, MessageSegment
 from nonebot.exception import FinishedException
@@ -18,8 +17,6 @@ from ..lib.api import api_request
 from ..lib.render import render_gacha_analysis_image, render_gacha_global_stats_image, render_gacha_records_image
 from .user_bind import TABLE_NAME, _get_db_path
 
-
-logger = logging.getLogger("nonebot")
 
 POLL_INTERVAL_SECONDS = 1.5
 POLL_TIMEOUT_SECONDS = 180

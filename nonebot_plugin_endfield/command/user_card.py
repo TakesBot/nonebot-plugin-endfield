@@ -3,7 +3,6 @@ import base64
 import concurrent.futures
 import io
 import json
-import logging
 import math
 import os
 import sqlite3
@@ -14,7 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
-from nonebot import get_driver, on_command
+from nonebot import get_driver, on_command, logger
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.rule import to_me
@@ -24,8 +23,6 @@ from ..config import Config
 from ..lib.api import api_request
 from .user_bind import TABLE_NAME, _get_db_path
 
-
-logger = logging.getLogger("nonebot")
 
 _FONT_INIT_LOCK = threading.Lock()
 _FONT_INIT_DONE = False

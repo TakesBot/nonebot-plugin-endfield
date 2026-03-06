@@ -1,6 +1,5 @@
 import io
 import json
-import logging
 import os
 import threading
 from datetime import datetime
@@ -8,10 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import httpx
+from nonebot import logger
 from PIL import Image, ImageDraw, ImageFont
-
-
-logger = logging.getLogger("nonebot")
 
 _FONT_INIT_LOCK = threading.Lock()
 _FONT_INIT_DONE = False

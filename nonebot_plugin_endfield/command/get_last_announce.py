@@ -1,7 +1,6 @@
 import base64
-import logging
 
-from nonebot import on_command, get_driver
+from nonebot import on_command, get_driver, logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.rule import to_me
 from ..config import Config
@@ -20,7 +19,7 @@ async def handle_get_last_announce():
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
-    logging.getLogger("nonebot").info(f"Using headers for API request: {headers}")
+    logger.info(f"Using headers for API request: {headers}")
     result = api_request("GET", "/api/announcements/latest", headers=headers or None)
     if result is None:
         await get_last_announce.finish("获取公告失败，请检查 endfield_api_key 和 endfield_api_baseurl 配置并查看日志。")

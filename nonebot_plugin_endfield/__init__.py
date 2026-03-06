@@ -1,6 +1,5 @@
-from nonebot import get_driver, require
+from nonebot import get_driver, require, logger
 from nonebot.plugin import PluginMetadata
-import logging
 
 from .config import Config
 
@@ -19,7 +18,7 @@ __plugin_meta__ = PluginMetadata(
 
 driver = get_driver()
 if not getattr(driver.config, "endfield_api_key", None):
-    logging.getLogger("nonebot").warning(
+    logger.warning(
         "Endfield Plugin: 未配置 endfield_api_key，插件将无法正常工作，请在配置文件中添加 endfield_api_key"
     )
 else:
