@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "nonebot-plugin-endfield"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
   { name="NekoTC", email="1719252259@qq.com" },
 ]
@@ -37,3 +41,6 @@ dependencies = [
 [project.entry-points."nonebot.plugin"]
 endfield = "endfield"
 nonebot_plugin_endfield = "nonebot_plugin_endfield"
+
+[tool.setuptools.packages.find]
+include = ["nonebot_plugin_endfield*", "endfield*"]
