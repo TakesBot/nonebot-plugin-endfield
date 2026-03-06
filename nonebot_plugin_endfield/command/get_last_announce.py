@@ -1,4 +1,5 @@
 import base64
+import asyncio
 
 from nonebot import on_command, get_driver, logger
 from nonebot.adapters.onebot.v11 import MessageSegment
@@ -20,7 +21,7 @@ async def handle_get_last_announce():
     if api_key:
         headers["X-API-Key"] = api_key
     logger.info(f"Using headers for API request: {headers}")
-    result = api_request("GET", "/api/announcements/latest", headers=headers or None)
+    result = await api_request("GET", "/api/announcements/latest", headers=headers or None)
     if result is None:
         await get_last_announce.finish("获取公告失败，请检查 endfield_api_key 和 endfield_api_baseurl 配置并查看日志。")
 
@@ -28,7 +29,7 @@ async def handle_get_last_announce():
     item_id = data.get("item_id") if isinstance(data, dict) else None
     origin_link = f"https://www.skland.com/article?id={item_id}" if item_id else None
 
-    image_bytes = render_announce_data_image(result)
+    image_bytes = await asyncio.to_thread(render_announce_data_image, result)
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     if origin_link:
         await get_last_announce.finish(

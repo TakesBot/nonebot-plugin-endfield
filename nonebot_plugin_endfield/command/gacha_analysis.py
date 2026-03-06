@@ -271,23 +271,23 @@ def _format_progress_msg(msg: str, user_id: str, user_name: str) -> str:
 	return text.replace("{qq号}", uid).replace("{qqname}", name)
 
 
-def _api_get(path: str, framework_token: Optional[str] = None, params: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+async def _api_get(path: str, framework_token: Optional[str] = None, params: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
 	p = path
 	if params:
 		query = "&".join([f"{k}={v}" for k, v in params.items() if v is not None])
 		if query:
 			p = f"{path}?{query}"
-	return api_request("GET", p, headers=_build_headers(framework_token))
+	return await api_request("GET", p, headers=_build_headers(framework_token))
 
 
-def _api_post(path: str, framework_token: Optional[str] = None, data: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
-	return api_request("POST", path, headers=_build_headers(framework_token), data=data or {})
+async def _api_post(path: str, framework_token: Optional[str] = None, data: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+	return await api_request("POST", path, headers=_build_headers(framework_token), data=data or {})
 
 
 async def _refresh_local_cache_from_cloud(framework_token: str, user_id: str, role_id: str) -> bool:
 	for attempt in range(1, 4):
 		try:
-			stats_data = await asyncio.to_thread(_api_get, "/api/endfield/gacha/stats", framework_token)
+			stats_data = await _api_get("/api/endfield/gacha/stats", framework_token)
 			if not stats_data or stats_data.get("code") not in (0, None):
 				if attempt < 3:
 					await asyncio.sleep(1.5)
@@ -300,8 +300,7 @@ async def _refresh_local_cache_from_cloud(framework_token: str, user_id: str, ro
 				all_rows: list[dict[str, Any]] = []
 				page = 1
 				while True:
-					res = await asyncio.to_thread(
-						_api_get,
+					res = await _api_get(
 						"/api/endfield/gacha/records",
 						framework_token,
 						{"pools": pool, "page": page, "limit": 500},
@@ -320,9 +319,8 @@ async def _refresh_local_cache_from_cloud(framework_token: str, user_id: str, ro
 			stats_payload = (stats_data.get("data") if isinstance(stats_data.get("data"), dict) else stats_data) or {}
 			user_info = stats_payload.get("user_info") if isinstance(stats_payload.get("user_info"), dict) else {}
 
-			# 复用 user_card 同款接口拉取头像并写入缓存，供抽卡分析页直接展示
 			try:
-				note_data = await asyncio.to_thread(_api_get, "/api/endfield/note", framework_token)
+				note_data = await _api_get("/api/endfield/note", framework_token)
 				note_payload = (note_data or {}).get("data") if isinstance((note_data or {}).get("data"), dict) else {}
 				base = note_payload.get("base") if isinstance(note_payload.get("base"), dict) else {}
 				avatar_url = str(base.get("avatarUrl") or base.get("avatar") or "").strip()
@@ -436,7 +434,7 @@ def _to_image_segment(image_bytes: bytes) -> MessageSegment:
 
 async def _get_bili_current_up(framework_token: str) -> dict[str, Any]:
 	try:
-		res = await asyncio.to_thread(_api_get, "/api/bili-wiki/activities", framework_token)
+		res = await _api_get("/api/bili-wiki/activities", framework_token)
 		data = (res or {}).get("data") or {}
 		items = data.get("items") or data.get("activities") or []
 		if not isinstance(items, list):
@@ -469,7 +467,7 @@ async def _sync_gacha(
 		return "未绑定终末地账号，请先发送“终末地绑定”完成绑定。"
 
 	framework_token = binding["framework_token"]
-	status_data = await asyncio.to_thread(_api_get, "/api/endfield/gacha/sync/status", framework_token)
+	status_data = await _api_get("/api/endfield/gacha/sync/status", framework_token)
 	status_inner = (status_data or {}).get("data") if isinstance((status_data or {}).get("data"), dict) else status_data
 	if (status_inner or {}).get("status") == "syncing":
 		progress = (status_inner or {}).get("progress") or 0
@@ -484,7 +482,7 @@ async def _sync_gacha(
 			msg[-1] += f" | 已获取 {records_found} 条"
 		return "\n".join(msg)
 
-	accounts_data = await asyncio.to_thread(_api_get, "/api/endfield/gacha/accounts", framework_token)
+	accounts_data = await _api_get("/api/endfield/gacha/accounts", framework_token)
 	ad = (accounts_data or {}).get("data") if isinstance((accounts_data or {}).get("data"), dict) else accounts_data
 	accounts = (ad or {}).get("accounts") or []
 	need_select = bool((ad or {}).get("need_select"))
@@ -545,7 +543,7 @@ async def _start_fetch_and_poll(
 	if account_uid:
 		body["account_uid"] = account_uid
 
-	fetch_res = await asyncio.to_thread(_api_post, "/api/endfield/gacha/fetch", framework_token, body)
+	fetch_res = await _api_post("/api/endfield/gacha/fetch", framework_token, body)
 	fetch_data = (fetch_res or {}).get("data") if isinstance((fetch_res or {}).get("data"), dict) else fetch_res
 	if (fetch_data or {}).get("status") == "conflict":
 		return "抽卡同步繁忙，请稍后重试。"
@@ -556,7 +554,7 @@ async def _start_fetch_and_poll(
 	start_ts = time.time()
 	while (time.time() - start_ts) < POLL_TIMEOUT_SECONDS:
 		await asyncio.sleep(POLL_INTERVAL_SECONDS)
-		status_res = await asyncio.to_thread(_api_get, "/api/endfield/gacha/sync/status", framework_token)
+		status_res = await _api_get("/api/endfield/gacha/sync/status", framework_token)
 		status_data = (status_res or {}).get("data") if isinstance((status_res or {}).get("data"), dict) else status_res
 		if not status_data:
 			continue
@@ -702,14 +700,13 @@ async def handle_gacha_global(event: MessageEvent):
 	if "全服抽卡统计" in raw_msg:
 		keyword = raw_msg.split("全服抽卡统计", 1)[1].strip()
 
-	stats_res = await asyncio.to_thread(_api_get, "/api/endfield/gacha/global-stats", framework_token)
+	stats_res = await _api_get("/api/endfield/gacha/global-stats", framework_token)
 	stats_data = (stats_res or {}).get("data") if isinstance((stats_res or {}).get("data"), dict) else stats_res
 	if not stats_data or not isinstance(stats_data, dict):
 		await gacha_global.finish("获取全服抽卡统计失败，请稍后重试。")
 
 	if keyword:
-		stats_res2 = await asyncio.to_thread(
-			_api_get,
+		stats_res2 = await _api_get(
 			"/api/endfield/gacha/global-stats",
 			framework_token,
 			{"pool_name": keyword},
@@ -783,7 +780,7 @@ async def handle_sync_all(event: MessageEvent):
 		token = active.get("framework_token")
 		if not token:
 			continue
-		accounts_res = await asyncio.to_thread(_api_get, "/api/endfield/gacha/accounts", token)
+		accounts_res = await _api_get("/api/endfield/gacha/accounts", token)
 		accounts_data = (accounts_res or {}).get("data") if isinstance((accounts_res or {}).get("data"), dict) else accounts_res
 		accounts = (accounts_data or {}).get("accounts") or []
 		if not accounts:
@@ -800,14 +797,13 @@ async def handle_sync_all(event: MessageEvent):
 		if i > 0:
 			await asyncio.sleep(3)
 
-		status_res = await asyncio.to_thread(_api_get, "/api/endfield/gacha/sync/status", token)
+		status_res = await _api_get("/api/endfield/gacha/sync/status", token)
 		status_data = (status_res or {}).get("data") if isinstance((status_res or {}).get("data"), dict) else status_res
 		if (status_data or {}).get("status") == "syncing":
 			skipped += 1
 			continue
 
-		fetch_res = await asyncio.to_thread(
-			_api_post,
+		fetch_res = await _api_post(
 			"/api/endfield/gacha/sync/fetch",
 			token,
 			{"account_uid": account_uid, "server_id": str(server_id or "1")},

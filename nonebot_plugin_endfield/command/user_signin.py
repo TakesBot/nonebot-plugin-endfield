@@ -80,7 +80,7 @@ async def handle_user_signin(event: Event) -> None:
 		"x-api-key": api_key,
 		"x-framework-token": binding["framework_token"],
 	}
-	result = api_request("POST", "/api/endfield/attendance", headers=headers)
+	result = await api_request("POST", "/api/endfield/attendance", headers=headers)
 	if isinstance(result, dict) and result.get("code") == 0:
 		data = result.get("data")
 		if isinstance(data, dict) and data.get("already_signed") is True:

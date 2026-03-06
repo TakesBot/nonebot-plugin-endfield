@@ -373,7 +373,7 @@ async def handle_user_bind(bot: Bot, event: Event):
 
     common_headers = {"X-API-KEY": api_key}
 
-    qr_data = api_request("GET", "/login/endfield/qr", headers=common_headers)
+    qr_data = await api_request("GET", "/login/endfield/qr", headers=common_headers)
     if not isinstance(qr_data, dict) or qr_data.get("code") != 0:
         await user_bind.finish("获取二维码失败，请稍后重试。")
 
@@ -410,7 +410,7 @@ async def handle_user_bind(bot: Bot, event: Event):
 
     for _ in range(150):
         await asyncio.sleep(2)
-        status_response = api_request(
+        status_response = await api_request(
             "GET",
             f"/login/endfield/qr/status?framework_token={framework_token}",
             headers=common_headers,
@@ -427,7 +427,7 @@ async def handle_user_bind(bot: Bot, event: Event):
             await user_bind.finish("二维码已过期，请重新发送绑定命令。")
 
         if status == "done":
-            confirm_data = api_request(
+            confirm_data = await api_request(
                 "POST",
                 "/login/endfield/qr/confirm",
                 headers={
@@ -451,7 +451,7 @@ async def handle_user_bind(bot: Bot, event: Event):
         await user_bind.finish("等待扫码超时，请重新发送绑定命令。")
 
     binding_record_id = None
-    binding_record_data = api_request(
+    binding_record_data = await api_request(
         "POST",
         "/api/v1/bindings",
         headers={
@@ -469,7 +469,7 @@ async def handle_user_bind(bot: Bot, event: Event):
     else:
         logger.warning("create binding record failed, continue with original binding flow")
 
-    binding_data = api_request(
+    binding_data = await api_request(
         "GET",
         "/api/endfield/binding",
         headers={

@@ -1,6 +1,7 @@
+from typing import Any
+
 import httpx
-import logging
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from ..config import Config
 
 
@@ -9,7 +10,7 @@ def _build_url(path: str) -> str:
     base = getattr(driver.config, "endfield_api_baseurl", None)
     if not base:
         default_base = Config().endfield_api_baseurl
-        logging.getLogger("nonebot").info(
+        logger.info(
             f"endfield_api_baseurl not set in driver.config, using default from config.py: {default_base!r}"
         )
         base = default_base
@@ -22,16 +23,22 @@ def _build_url(path: str) -> str:
     return base + path
 
 
-def api_request(method: str, path: str, headers: dict = None, data: dict = None):
+async def api_request(
+    method: str,
+    path: str,
+    headers: dict[str, str] | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     url = _build_url(path)
     if not (url.startswith("http://") or url.startswith("https://")):
-        logging.getLogger("nonebot").warning(f"Invalid API URL constructed: {url!r}; aborting request")
+        logger.warning(f"Invalid API URL constructed: {url!r}; aborting request")
         return None
 
     try:
-        response = httpx.request(method, url, headers=headers, json=data, timeout=10.0)
-        response.raise_for_status()
-        return response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.request(method, url, headers=headers, json=data)
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
-        logging.getLogger("nonebot").warning(f"HTTP error occurred: {e}")
+        logger.warning(f"HTTP error occurred: {e}")
         return None

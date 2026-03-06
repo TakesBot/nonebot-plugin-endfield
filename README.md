@@ -93,7 +93,7 @@ endfield_api_baseurl=https://end-api.shallow.ink/
 
 ## 注意事项
 
-- 首次渲染图片时可能自动下载中文字体文件。
+- 可通过环境变量覆盖字体路径：`ENDFIELD_FONT_BOLD_PATH`、`ENDFIELD_FONT_PATH`、`ENDFIELD_FONT_REGULAR_PATH`。
 - 若提示 API 请求失败，请优先检查 `endfield_api_key` 与 `endfield_api_baseurl`。
 - 本插件依赖外部终末地 API 服务，服务可用性会直接影响功能。
 

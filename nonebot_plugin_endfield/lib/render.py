@@ -13,25 +13,32 @@ from PIL import Image, ImageDraw, ImageFont
 _FONT_INIT_LOCK = threading.Lock()
 _FONT_INIT_DONE = False
 _FALLBACK_FONT_FILES = {
-    "regular": (
-        "NotoSansCJKsc-Regular.otf",
-        "https://gh-proxy.org/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
-    ),
-    "bold": (
-        "NotoSansCJKsc-Bold.otf",
-        "https://gh-proxy.org/https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf",
-    ),
+    "regular": ("NotoSansCJKsc-Regular.otf",),
+    "bold": ("NotoSansCJKsc-Bold.otf",),
 }
 
 
 def _get_font_cache_dir() -> Path:
-    return Path(__file__).resolve().parent / "fonts"
+    return Path(__file__).resolve().parent.parent / "assets" / "fonts"
+
+
+def _font_candidates_from_env(*keys: str) -> list[Path]:
+    result: list[Path] = []
+    for key in keys:
+        raw = os.getenv(key, "").strip()
+        if not raw:
+            continue
+        for part in raw.split(os.pathsep):
+            p = Path(part.strip())
+            if p.exists():
+                result.append(p)
+    return result
 
 
 def _get_fallback_font_candidates(bold: bool) -> list[Path]:
     font_dir = _get_font_cache_dir()
-    regular_name, _ = _FALLBACK_FONT_FILES["regular"]
-    bold_name, _ = _FALLBACK_FONT_FILES["bold"]
+    regular_name = _FALLBACK_FONT_FILES["regular"][0]
+    bold_name = _FALLBACK_FONT_FILES["bold"][0]
     if bold:
         return [font_dir / bold_name, font_dir / regular_name]
     return [font_dir / regular_name, font_dir / bold_name]
@@ -47,35 +54,26 @@ def _ensure_fallback_fonts() -> None:
             return
 
         font_dir = _get_font_cache_dir()
-        font_dir.mkdir(parents=True, exist_ok=True)
-
-        for _, (filename, url) in _FALLBACK_FONT_FILES.items():
-            font_path = font_dir / filename
-            if font_path.exists() and font_path.stat().st_size > 1024:
-                continue
-            try:
-                response = httpx.get(url, timeout=20.0)
-                response.raise_for_status()
-                font_path.write_bytes(response.content)
-            except Exception as e:
-                logger.warning(f"fallback font download failed: {filename}, error={e}")
+        if not font_dir.exists():
+            logger.warning(f"packaged font dir not found: {font_dir}, will fallback to PIL default font")
+        else:
+            missing = [
+                name_tuple[0]
+                for name_tuple in _FALLBACK_FONT_FILES.values()
+                if not (font_dir / name_tuple[0]).exists()
+            ]
+            if missing:
+                logger.warning(f"packaged fonts missing: {', '.join(missing)}, will fallback to PIL default font")
 
         _FONT_INIT_DONE = True
 
 
 def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = [
-        "C:/Windows/Fonts/msyh.ttc",
-        "C:/Windows/Fonts/simhei.ttf",
-        "/System/Library/Fonts/PingFang.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size=size)
-            except Exception:
-                continue
+    for path in _font_candidates_from_env("ENDFIELD_FONT_PATH", "ENDFIELD_FONT_REGULAR_PATH"):
+        try:
+            return ImageFont.truetype(str(path), size=size)
+        except Exception:
+            continue
 
     _ensure_fallback_fonts()
     for path in _get_fallback_font_candidates(bold=False):
@@ -88,20 +86,11 @@ def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def _pick_bold_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = [
-        "C:/Windows/Fonts/msyhbd.ttc",
-        "C:/Windows/Fonts/simhei.ttf",
-        "C:/Windows/Fonts/msyh.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size=size)
-            except Exception:
-                continue
+    for path in _font_candidates_from_env("ENDFIELD_FONT_BOLD_PATH", "ENDFIELD_FONT_PATH", "ENDFIELD_FONT_REGULAR_PATH"):
+        try:
+            return ImageFont.truetype(str(path), size=size)
+        except Exception:
+            continue
 
     _ensure_fallback_fonts()
     for path in _get_fallback_font_candidates(bold=True):
