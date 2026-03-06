@@ -8,6 +8,7 @@ from nonebot.rule import to_me
 from ..config import Config
 from ..lib.api import api_request
 from ..lib.render import render_announce_data_image
+from ..lib.utils import get_api_key
 
 
 get_last_announce = on_command("终末地公告")
@@ -29,9 +30,7 @@ def _build_announce_cache_key(result: dict) -> str:
 
 @get_last_announce.handle()
 async def handle_get_last_announce():
-    cfg = Config()
-    driver = get_driver()
-    api_key = getattr(driver.config, "endfield_api_key", None) or cfg.endfield_api_key
+    api_key = get_api_key()
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key

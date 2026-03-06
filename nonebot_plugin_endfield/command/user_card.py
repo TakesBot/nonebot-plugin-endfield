@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..config import Config
 from ..lib.api import api_request
-from .user_bind import TABLE_NAME, _get_db_path
+from ..lib.utils import get_active_binding, get_api_key, build_headers
 
 
 _FONT_INIT_LOCK = threading.Lock()
@@ -36,58 +36,6 @@ _FALLBACK_FONT_FILES = {
 }
 
 user_card = on_command("终末地信息卡", aliases={"终末地名片", "终末地卡片", "endfield信息卡"})
-
-
-def _get_api_key() -> Optional[str]:
-	cfg = Config()
-	driver = get_driver()
-	return getattr(driver.config, "endfield_api_key", None) or cfg.endfield_api_key
-
-
-def _get_active_binding(user_id: str) -> Optional[dict[str, Any]]:
-	db_path = _get_db_path()
-	if not db_path.exists():
-		return None
-
-	try:
-		with sqlite3.connect(db_path) as conn:
-			row = conn.execute(
-				f"""
-				SELECT framework_token, role_id, server_id, binding_info
-				FROM {TABLE_NAME}
-				WHERE user_id = ?
-				ORDER BY is_active DESC, updated_at DESC, id DESC
-				LIMIT 1
-				""",
-				(user_id,),
-			).fetchone()
-	except sqlite3.OperationalError:
-		return None
-
-	if not row:
-		return None
-
-	framework_token = str(row[0]) if row[0] else None
-	role_id = str(row[1]) if row[1] else None
-	server_id = str(row[2]) if row[2] else None
-	binding_info_raw = row[3]
-
-	if binding_info_raw:
-		try:
-			binding_info = binding_info_raw if isinstance(binding_info_raw, dict) else json.loads(binding_info_raw)
-			role_id = role_id or (str(binding_info.get("roleId")) if binding_info.get("roleId") else None)
-			server_id = server_id or (str(binding_info.get("serverId")) if binding_info.get("serverId") else None)
-		except Exception:
-			pass
-
-	if not framework_token:
-		return None
-
-	return {
-		"framework_token": framework_token,
-		"role_id": role_id,
-		"server_id": server_id,
-	}
 
 
 def _pick_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -457,12 +405,12 @@ def _render_note_card(note_data: dict[str, Any], local_role_id: Optional[str], l
 
 @user_card.handle()
 async def handle_user_card(event: Event):
-	api_key = _get_api_key()
+	api_key = get_api_key()
 	if not api_key:
 		await user_card.finish("未配置 endfield_api_key，无法获取信息卡。")
 
 	user_id = str(event.get_user_id())
-	active_binding = _get_active_binding(user_id)
+	active_binding = get_active_binding(user_id)
 	if not active_binding:
 		await user_card.finish("未找到已绑定账号，请先使用“终末地绑定”。")
 	framework_token = active_binding["framework_token"]

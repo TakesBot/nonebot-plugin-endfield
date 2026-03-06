@@ -15,7 +15,7 @@ import nonebot_plugin_localstore as store
 from ..config import Config
 from ..lib.api import api_request
 from ..lib.render import render_gacha_analysis_image, render_gacha_global_stats_image, render_gacha_records_image
-from .user_bind import TABLE_NAME, _get_db_path
+from ..lib.utils import TABLE_NAME, get_db_path, get_data_dir, get_api_key, build_headers, get_active_binding
 
 
 POLL_INTERVAL_SECONDS = 1.5
@@ -31,74 +31,8 @@ gacha_sync_all = on_command("终末地同步全部抽卡", priority=30, block=Tr
 gacha_select = on_message(priority=29, block=False)
 
 
-def _get_data_dir() -> Path:
-	return store.get_plugin_data_dir()
-
-
-def _get_api_key() -> Optional[str]:
-	cfg = Config()
-	driver = get_driver()
-	return getattr(driver.config, "endfield_api_key", None) or cfg.endfield_api_key
-
-
-def _build_headers(framework_token: Optional[str] = None) -> dict[str, str]:
-	headers: dict[str, str] = {}
-	api_key = _get_api_key()
-	if api_key:
-		headers["x-api-key"] = api_key
-	if framework_token:
-		headers["x-framework-token"] = framework_token
-	return headers
-
-
-def _get_active_binding(user_id: str) -> Optional[dict[str, Any]]:
-	db_path = _get_db_path()
-	if not db_path.exists():
-		return None
-
-	try:
-		with sqlite3.connect(db_path) as conn:
-			row = conn.execute(
-				f"""
-				SELECT framework_token, role_id, server_id, binding_info
-				FROM {TABLE_NAME}
-				WHERE user_id = ?
-				ORDER BY is_active DESC, updated_at DESC, id DESC
-				LIMIT 1
-				""",
-				(user_id,),
-			).fetchone()
-	except sqlite3.OperationalError:
-		return None
-
-	if not row:
-		return None
-
-	framework_token = str(row[0]) if row[0] else None
-	role_id = str(row[1]) if row[1] else None
-	server_id = str(row[2]) if row[2] else None
-	binding_info_raw = row[3]
-
-	if binding_info_raw:
-		try:
-			binding_info = binding_info_raw if isinstance(binding_info_raw, dict) else json.loads(binding_info_raw)
-			role_id = role_id or (str(binding_info.get("roleId")) if binding_info.get("roleId") else None)
-			server_id = server_id or (str(binding_info.get("serverId")) if binding_info.get("serverId") else None)
-		except Exception:
-			pass
-
-	if not framework_token:
-		return None
-
-	return {
-		"framework_token": framework_token,
-		"role_id": role_id,
-		"server_id": server_id or "1",
-	}
-
-
 def _load_all_bindings() -> dict[str, list[dict[str, Any]]]:
-	db_path = _get_db_path()
+	db_path = get_db_path()
 	if not db_path.exists():
 		return {}
 	result: dict[str, list[dict[str, Any]]] = {}
@@ -138,7 +72,7 @@ def _load_all_bindings() -> dict[str, list[dict[str, Any]]]:
 
 
 def _cache_dir() -> Path:
-	d = _get_data_dir() / "gacha"
+	d = get_data_dir() / "gacha"
 	d.mkdir(parents=True, exist_ok=True)
 	return d
 
@@ -175,7 +109,7 @@ def _write_gacha_cache(user_id: str, role_id: str, payload: dict[str, Any]) -> b
 
 
 def _pending_file() -> Path:
-	return _get_data_dir() / "gacha_pending_select.json"
+	return get_data_dir() / "gacha_pending_select.json"
 
 
 def _load_pending_state() -> dict[str, Any]:
@@ -277,11 +211,11 @@ async def _api_get(path: str, framework_token: Optional[str] = None, params: Opt
 		query = "&".join([f"{k}={v}" for k, v in params.items() if v is not None])
 		if query:
 			p = f"{path}?{query}"
-	return await api_request("GET", p, headers=_build_headers(framework_token))
+	return await api_request("GET", p, headers=build_headers(framework_token))
 
 
 async def _api_post(path: str, framework_token: Optional[str] = None, data: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
-	return await api_request("POST", path, headers=_build_headers(framework_token), data=data or {})
+	return await api_request("POST", path, headers=build_headers(framework_token), data=data or {})
 
 
 async def _refresh_local_cache_from_cloud(framework_token: str, user_id: str, role_id: str) -> bool:
@@ -462,7 +396,7 @@ async def _sync_gacha(
 	source_from_analysis: bool = False,
 	source_from_sync_cmd: bool = False,
 ) -> Any:
-	binding = _get_active_binding(user_id)
+	binding = get_active_binding(user_id)
 	if not binding:
 		return "未绑定终末地账号，请先发送“终末地绑定”完成绑定。"
 
@@ -573,7 +507,7 @@ async def _start_fetch_and_poll(
 			return f"抽卡同步失败：{err}"
 
 		if status == "completed":
-			binding = _get_active_binding(user_id)
+			binding = get_active_binding(user_id)
 			role_id = (binding or {}).get("role_id") or ""
 			await _refresh_local_cache_from_cloud(framework_token, user_id, role_id)
 
@@ -614,7 +548,7 @@ async def handle_gacha_records(event: MessageEvent):
 	wants_sync = bool(asyncio.get_running_loop() and any(k in raw_msg for k in ("同步抽卡记录", "更新抽卡记录")))
 	user_id = str(event.get_user_id())
 
-	binding = _get_active_binding(user_id)
+	binding = get_active_binding(user_id)
 	if not binding:
 		await gacha_records.finish("未绑定终末地账号，请先发送“终末地绑定”完成绑定。")
 
@@ -660,7 +594,7 @@ async def handle_gacha_records(event: MessageEvent):
 @gacha_analysis.handle()
 async def handle_gacha_analysis(event: MessageEvent):
 	user_id = str(event.get_user_id())
-	binding = _get_active_binding(user_id)
+	binding = get_active_binding(user_id)
 	if not binding:
 		await gacha_analysis.finish("未绑定终末地账号，请先发送“终末地绑定”完成绑定。")
 
@@ -690,7 +624,7 @@ async def handle_gacha_analysis(event: MessageEvent):
 @gacha_global.handle()
 async def handle_gacha_global(event: MessageEvent):
 	user_id = str(event.get_user_id())
-	binding = _get_active_binding(user_id)
+	binding = get_active_binding(user_id)
 	if not binding:
 		await gacha_global.finish("未绑定终末地账号，请先发送“终末地绑定”完成绑定。")
 	framework_token = binding["framework_token"]

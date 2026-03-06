@@ -17,12 +17,11 @@ import nonebot_plugin_localstore as store
 
 from ..config import Config
 from ..lib.api import api_request
+from ..lib.utils import TABLE_NAME, get_db_path, get_api_key, build_headers
 
 
 user_bind = on_command("终末地绑定", aliases={"endfield绑定", "终末地扫码绑定"})
 switch_bind = on_command("终末地切换账号", aliases={"endfield切换账号", "终末地账号切换"})
-
-TABLE_NAME = "endfield_bindings_v3"
 
 
 def _normalize_qrcode_for_onebot_image(qrcode: Any) -> Optional[str]:
@@ -83,12 +82,6 @@ def _format_expire_time(raw_expire: Any) -> Optional[str]:
     return str(raw_expire)
 
 
-def _get_api_key() -> Optional[str]:
-    cfg = Config()
-    driver = get_driver()
-    return getattr(driver.config, "endfield_api_key", None) or cfg.endfield_api_key
-
-
 def _extract_message_id(send_result: Any) -> Optional[int]:
     if isinstance(send_result, dict):
         msg_id = send_result.get("message_id")
@@ -108,10 +101,6 @@ async def _safe_delete_msg(bot: Bot, message_id: Optional[int]) -> None:
         logger.debug(f"delete_msg failed, message_id={message_id}")
     except Exception as e:
         logger.debug(f"delete_msg exception, message_id={message_id}, error={e}")
-
-
-def _get_db_path() -> Path:
-    return store.get_plugin_data_file("endfield_bindings_v3.db")
 
 
 def _create_latest_schema(conn: sqlite3.Connection) -> None:
@@ -216,7 +205,7 @@ def _migrate_legacy_table(conn: sqlite3.Connection, existing_columns: set[str]) 
 
 
 def _ensure_table() -> None:
-    db_path = _get_db_path()
+    db_path = get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         table_exists = conn.execute(
@@ -267,7 +256,7 @@ def _save_binding(
     expires_at: Optional[str],
 ) -> None:
     _ensure_table()
-    db_path = _get_db_path()
+    db_path = get_db_path()
     user_info = {"nickname": nickname}
     binding_info = {
         "id": binding_id,
@@ -316,7 +305,7 @@ def _save_binding(
 
 def _list_bindings(user_id: str) -> list[dict[str, Any]]:
     _ensure_table()
-    db_path = _get_db_path()
+    db_path = get_db_path()
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
@@ -355,7 +344,7 @@ def _list_bindings(user_id: str) -> list[dict[str, Any]]:
 
 def _switch_active_binding(user_id: str, binding_row_id: int) -> None:
     _ensure_table()
-    db_path = _get_db_path()
+    db_path = get_db_path()
     with sqlite3.connect(db_path) as conn:
         conn.execute(f"UPDATE {TABLE_NAME} SET is_active = 0 WHERE user_id = ?", (user_id,))
         conn.execute(
@@ -367,7 +356,7 @@ def _switch_active_binding(user_id: str, binding_row_id: int) -> None:
 
 @user_bind.handle()
 async def handle_user_bind(bot: Bot, event: Event):
-    api_key = _get_api_key()
+    api_key = get_api_key()
     if not api_key:
         await user_bind.finish("未配置 endfield_api_key，无法进行绑定。")
 
