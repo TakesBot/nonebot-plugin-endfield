@@ -7,10 +7,11 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from nonebot import get_driver, on_command, on_message
+from nonebot import get_driver, on_command, on_message, require
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, MessageSegment
 from nonebot.exception import FinishedException
+import nonebot_plugin_localstore as store
 
 from ..config import Config
 from ..lib.api import api_request
@@ -19,6 +20,8 @@ from .user_bind import TABLE_NAME, _get_db_path
 
 
 logger = logging.getLogger("nonebot")
+
+require("nonebot_plugin_localstore")
 
 POLL_INTERVAL_SECONDS = 1.5
 POLL_TIMEOUT_SECONDS = 180
@@ -34,10 +37,7 @@ gacha_select = on_message(priority=29, block=False)
 
 
 def _get_data_dir() -> Path:
-	driver = get_driver()
-	configured_data_dir = getattr(driver.config, "data_dir", None)
-	data_dir = Path(configured_data_dir) if configured_data_dir else (Path.cwd() / "data")
-	return data_dir / "nonebot_plugin_endfield"
+	return store.get_plugin_data_dir()
 
 
 def _get_api_key() -> Optional[str]:

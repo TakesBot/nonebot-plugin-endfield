@@ -85,7 +85,7 @@ endfield_api_baseurl=https://end-api.shallow.ink/
 
 ## 数据存储
 
-插件会在 `data/nonebot_plugin_endfield/`（或你配置的 `data_dir`）下写入数据：
+插件使用 `nonebot-plugin-localstore` 管理数据目录，并在插件专属 data 目录下写入数据（可通过 localstore 配置项自定义）：
 
 - `endfield_bindings_v3.db`：账号绑定与当前激活账号
 - `gacha/*.json`：抽卡缓存数据

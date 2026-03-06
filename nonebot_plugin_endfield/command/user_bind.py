@@ -8,18 +8,21 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
-from nonebot import get_driver, on_command
+from nonebot import get_driver, on_command, require
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg
 from nonebot.rule import to_me
+import nonebot_plugin_localstore as store
 
 from ..config import Config
 from ..lib.api import api_request
 
 
 logger = logging.getLogger("nonebot")
+
+require("nonebot_plugin_localstore")
 
 user_bind = on_command("终末地绑定", aliases={"endfield绑定", "终末地扫码绑定"})
 switch_bind = on_command("终末地切换账号", aliases={"endfield切换账号", "终末地账号切换"})
@@ -113,10 +116,7 @@ async def _safe_delete_msg(bot: Bot, message_id: Optional[int]) -> None:
 
 
 def _get_db_path() -> Path:
-    driver = get_driver()
-    configured_data_dir = getattr(driver.config, "data_dir", None)
-    data_dir = Path(configured_data_dir) if configured_data_dir else (Path.cwd() / "data")
-    return data_dir / "nonebot_plugin_endfield" / "endfield_bindings_v3.db"
+    return store.get_plugin_data_file("endfield_bindings_v3.db")
 
 
 def _create_latest_schema(conn: sqlite3.Connection) -> None:
