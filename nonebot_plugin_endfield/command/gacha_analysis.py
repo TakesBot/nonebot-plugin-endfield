@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from nonebot import get_driver, on_regex
+from nonebot import get_driver, on_command, on_message
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, MessageSegment
 from nonebot.exception import FinishedException
@@ -26,31 +26,11 @@ PENDING_SELECT_TTL_SECONDS = 300
 GACHA_POOLS = ("limited", "standard", "beginner", "weapon")
 
 
-gacha_records = on_regex(
-	r"^(?:(?:[:：]|[/#](?:zmd|终末地))\s*)?(?:(?:同步|更新))?抽卡记录(?:\s*(.+))?$",
-	priority=30,
-	block=True,
-)
-gacha_analysis = on_regex(
-	r"^(?:(?:[:：]|[/#](?:zmd|终末地))\s*)?抽卡分析(?:\s+.*)?$",
-	priority=30,
-	block=True,
-)
-gacha_global = on_regex(
-	r"^(?:(?:[:：]|[/#](?:zmd|终末地))\s*)?全服抽卡统计(?:\s+(.+))?$",
-	priority=30,
-	block=True,
-)
-gacha_sync_all = on_regex(
-	r"^(?:(?:[:：]|[/#](?:zmd|终末地))\s*)?同步全部抽卡$",
-	priority=30,
-	block=True,
-)
-gacha_select = on_regex(
-	r"^(?:[:：]|[/#](?:zmd|终末地))?[1-9]\d{0,2}$",
-	priority=29,
-	block=False,
-)
+gacha_records = on_command("终末地抽卡记录", aliases={"终末地同步抽卡记录", "终末地更新抽卡记录"}, priority=30, block=True)
+gacha_analysis = on_command("终末地抽卡分析", priority=30, block=True)
+gacha_global = on_command("终末地全服抽卡统计", priority=30, block=True)
+gacha_sync_all = on_command("终末地同步全部抽卡", priority=30, block=True)
+gacha_select = on_message(priority=29, block=False)
 
 
 def _get_data_dir() -> Path:
