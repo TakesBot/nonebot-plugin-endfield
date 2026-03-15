@@ -14,19 +14,30 @@ from ..config import Config
 
 
 TABLE_NAME = "endfield_bindings_v3"
-PLUGIN_DATA_DIR = store.get_plugin_data_dir()
-PLUGIN_DB_PATH = store.get_plugin_data_file("endfield_bindings_v3.db")
+PLUGIN_NAME = "nonebot_plugin_endfield"
+_PLUGIN_DATA_DIR: Path | None = None
+_PLUGIN_DB_PATH: Path | None = None
 PLUGIN_CONFIG = get_plugin_config(Config)
 
 
 def get_data_dir() -> Path:
 	"""获取插件数据目录"""
-	return PLUGIN_DATA_DIR
+	global _PLUGIN_DATA_DIR
+	if _PLUGIN_DATA_DIR is None:
+		try:
+			_PLUGIN_DATA_DIR = Path(store.get_data_dir(PLUGIN_NAME))
+		except Exception:
+			_PLUGIN_DATA_DIR = Path.cwd() / ".nonebot_plugin_endfield"
+		_PLUGIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
+	return _PLUGIN_DATA_DIR
 
 
 def get_db_path() -> Path:
 	"""获取数据库文件路径"""
-	return PLUGIN_DB_PATH
+	global _PLUGIN_DB_PATH
+	if _PLUGIN_DB_PATH is None:
+		_PLUGIN_DB_PATH = get_data_dir() / "endfield_bindings_v3.db"
+	return _PLUGIN_DB_PATH
 
 
 def get_api_key() -> Optional[str]:
