@@ -14,8 +14,13 @@ from ..lib.utils import get_active_binding, get_api_key
 user_card = on_command("终末地信息卡", aliases={"终末地名片", "终末地卡片", "endfield信息卡"})
 
 
-def _render_note_card(note_data: dict[str, Any], local_role_id: Optional[str], local_server_id: Optional[str]) -> bytes:
-    return render_user_note_card(note_data, local_role_id, local_server_id)
+def _render_note_card(
+    note_data: dict[str, Any],
+    spaceship_data: dict[str, Any] | None,
+    local_role_id: Optional[str],
+    local_server_id: Optional[str],
+) -> bytes:
+    return render_user_note_card(note_data, local_role_id, local_server_id, spaceship_data)
 
 
 @user_card.handle()
@@ -32,23 +37,36 @@ async def handle_user_card(event: Event):
     local_role_id = active_binding.get("role_id")
     local_server_id = active_binding.get("server_id")
 
-    note_data = await api_request(
-        "GET",
-        "/api/endfield/note",
-        {
-            "X-API-Key": api_key,
-            "X-Framework-Token": framework_token,
-        },
+    common_headers = {
+        "X-API-Key": api_key,
+        "X-Framework-Token": framework_token,
+    }
+    note_data, spaceship_data = await asyncio.gather(
+        api_request(
+            "GET",
+            "/api/endfield/note",
+            common_headers,
+        ),
+        api_request(
+            "GET",
+            "/api/endfield/spaceship",
+            common_headers,
+        ),
     )
 
     if not isinstance(note_data, dict) or note_data.get("code") != 0:
         msg = note_data.get("message") if isinstance(note_data, dict) else None
         await user_card.finish(f"获取信息卡数据失败：{msg or '请稍后重试'}")
 
+    if not isinstance(spaceship_data, dict) or spaceship_data.get("code") != 0:
+        logger.warning("get spaceship data failed, fallback to note only")
+        spaceship_data = {}
+
     try:
         image_bytes = await asyncio.to_thread(
             _render_note_card,
             note_data,
+            spaceship_data,
             local_role_id,
             local_server_id,
         )

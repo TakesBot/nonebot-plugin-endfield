@@ -6,7 +6,12 @@ from .helpers import escape_text
 from .runtime import render_html_to_image
 
 
-def render_user_note_card(note_data: Dict[str, Any], local_role_id: str | None, local_server_id: str | None) -> bytes:
+def render_user_note_card(
+    note_data: Dict[str, Any],
+    local_role_id: str | None,
+    local_server_id: str | None,
+    spaceship_data: Dict[str, Any] | None = None,
+) -> bytes:
     data = note_data.get("data") if isinstance(note_data, dict) else None
     if not isinstance(data, dict):
         data = {}
@@ -39,6 +44,17 @@ def render_user_note_card(note_data: Dict[str, Any], local_role_id: str | None, 
             return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
             return text
+
+    def _safe_percent(value: Any, default: int = 0) -> int:
+        if value is None:
+            return default
+        try:
+            text = str(value).strip().replace("%", "")
+            if not text:
+                return default
+            return int(float(text))
+        except Exception:
+            return default
 
     role_name = str(base.get("name") or "未知用户")
     api_role_id = str(base.get("roleId") or "")
@@ -120,6 +136,92 @@ def render_user_note_card(note_data: Dict[str, Any], local_role_id: str | None, 
 
     road_flow = "".join(medal_cards)
 
+    spaceship_payload = spaceship_data.get("data") if isinstance(spaceship_data, dict) else None
+    if not isinstance(spaceship_payload, dict):
+        spaceship_payload = {}
+
+    room_list = spaceship_payload.get("rooms") if isinstance(spaceship_payload.get("rooms"), list) else []
+    character_cards = (
+        spaceship_payload.get("characterCards") if isinstance(spaceship_payload.get("characterCards"), list) else []
+    )
+
+    char_status_by_id: dict[str, dict[str, Any]] = {}
+    for item in character_cards:
+        if not isinstance(item, dict):
+            continue
+        char_id = str(item.get("charId") or "").strip().lower()
+        if not char_id:
+            continue
+        char_status_by_id[char_id] = item
+
+    spaceship_room_cards: list[str] = []
+    for room_index, room in enumerate(room_list, start=1):
+        if not isinstance(room, dict):
+            continue
+        room_name = str(room.get("roomName") or f"房间{room_index}").strip()
+        room_level = _safe_int(room.get("level"))
+        room_type = _safe_int(room.get("type"), -1)
+        room_chars = room.get("chars") if isinstance(room.get("chars"), list) else []
+        is_core_room = room_name == "总控中枢" or room_type == 0
+        room_class = "spaceship-room spaceship-room-core" if is_core_room else "spaceship-room"
+
+        char_blocks: list[str] = []
+        for room_char in room_chars:
+            if not isinstance(room_char, dict):
+                continue
+            char_id = str(room_char.get("charId") or "").strip().lower()
+            extra = char_status_by_id.get(char_id, {})
+            room_avatar_url = str(room_char.get("avatarUrl") or extra.get("avatarUrl") or "").strip()
+            mood_display = str(extra.get("moodDisplay") or f"{_safe_percent(room_char.get('moodPercent'))}%")
+            trust_display = str(extra.get("trustDisplay") or f"{_safe_percent(room_char.get('trustPercent'))}%")
+            mood_percent = _safe_percent(extra.get("moodPercent"), _safe_percent(room_char.get("moodPercent")))
+            trust_percent = _safe_percent(extra.get("trustPercent"), _safe_percent(room_char.get("trustPercent")))
+            mood_width = max(0, min(100, mood_percent))
+            # Trust bar uses 200% as full scale.
+            trust_width = max(0.0, min(100.0, (trust_percent / 200.0) * 100.0))
+            if mood_percent < 20:
+                mood_color = "#ef4444"
+            elif mood_percent < 40:
+                mood_color = "#eab308"
+            else:
+                mood_color = "#22c55e"
+
+            avatar_html = (
+                f"<img src=\"{escape_text(room_avatar_url)}\" alt=\"角色头像\" loading=\"lazy\" onerror=\"this.remove()\" />"
+                if room_avatar_url
+                else ""
+            )
+
+            char_blocks.append(
+                "<div class=\"ship-char\">"
+                f"<div class=\"ship-avatar\">{avatar_html}</div>"
+                "<div class=\"ship-bars\">"
+                "<div class=\"ship-meter\">"
+                f"<span>心情 {escape_text(mood_display)}</span>"
+                "<div class=\"ship-meter-track\">"
+                f"<div class=\"ship-meter-fill\" style=\"width:{mood_width:.2f}%;background:{mood_color};\"></div>"
+                "</div>"
+                "</div>"
+                "<div class=\"ship-meter\">"
+                f"<span>信赖 {escape_text(trust_display)}</span>"
+                "<div class=\"ship-meter-track\">"
+                f"<div class=\"ship-meter-fill ship-meter-trust\" style=\"width:{trust_width:.2f}%;\"></div>"
+                "</div>"
+                "</div>"
+                "</div>"
+                "</div>"
+            )
+
+        spaceship_room_cards.append(
+            f"<article class=\"{room_class}\">"
+            "<div class=\"ship-room-head\">"
+            f"<h3>{escape_text(room_name)}</h3>"
+            f"<p>Lv.{room_level}</p>"
+            "</div>"
+            f"<div class=\"ship-room-body\">{''.join(char_blocks) or '<div class=\"block\">暂无角色</div>'}</div>"
+            "</article>"
+        )
+
     sorted_chars = sorted(
         [item for item in chars if isinstance(item, dict)],
         key=lambda item: _safe_int(item.get("level")),
@@ -196,21 +298,26 @@ def render_user_note_card(note_data: Dict[str, Any], local_role_id: str | None, 
       </div>
     </section>
 
-    <div class="account-road-section">
-      <section class=\"section\">
-        <h2 class=\"section-title\">账号概览</h2>
-        <ul class=\"section-body\">
-          <li>角色数：{char_num} | 武器数：{weapon_num} | 文档数：{doc_num}</li>
-          <li>注册：{escape_text(create_time)}</li>
-          <li>最近登录：{escape_text(last_login)}</li>
-        </ul>
-      </section>
+        <div class="account-road-section">
+            <section class=\"section\">
+                <h2 class=\"section-title\">账号概览</h2>
+                <ul class=\"section-body\">
+                    <li>角色数：{char_num} | 武器数：{weapon_num} | 文档数：{doc_num}</li>
+                    <li>注册：{escape_text(create_time)}</li>
+                    <li>最近登录：{escape_text(last_login)}</li>
+                </ul>
+            </section>
 
-      <section class="section">
-          <h2 class="section-title">光荣之路（已获得 {achieve_count} 枚蚀刻章）</h2>
-          <div class="road-flow">{road_flow or '<div class="block">暂无展示徽章</div>'}</div>
-      </section>
-    </div>
+            <section class="section">
+                    <h2 class="section-title">光荣之路（已获得 {achieve_count} 枚蚀刻章）</h2>
+                    <div class="road-flow">{road_flow or '<div class="block">暂无展示徽章</div>'}</div>
+            </section>
+        </div>
+
+        <section class="section spaceship-section">
+            <h2 class="section-title">帝江号建设</h2>
+            <div class="spaceship-grid">{''.join(spaceship_room_cards) or '<div class="block">暂无帝江号数据</div>'}</div>
+        </section>
 
     <section class=\"section\">
       <h2 class=\"section-title\">角色列表（共 {len(sorted_chars)} 名）</h2>
@@ -233,6 +340,23 @@ def render_user_note_card(note_data: Dict[str, Any], local_role_id: str | None, 
         ".meter-track{height:13px;border-radius:999px;background:#e5e7eb;overflow:hidden;}"
         ".meter-fill{height:100%;border-radius:999px;}"
         ".account-road-section{display:grid;grid-template-columns:1fr 1fr;gap:14px;}"
+        ".spaceship-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}"
+        ".spaceship-room{background:#f8fbff;border:1px solid #dce8f5;border-radius:12px;padding:10px;}"
+        ".spaceship-room-core{grid-column:span 2;}"
+        ".ship-room-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:8px;}"
+        ".ship-room-head h3{margin:0;font-size:20px;color:#0f172a;}"
+        ".ship-room-head p{margin:0;font-size:14px;color:#475569;}"
+        ".ship-room-body{display:flex;flex-direction:column;gap:8px;}"
+        ".ship-char{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:6px;}"
+        ".ship-avatar{width:48px;height:48px;border-radius:8px;overflow:hidden;background:#e5e7eb;border:1px solid #cbd5e1;}"
+        ".ship-avatar img{width:100%;height:100%;object-fit:cover;display:block;}"
+        ".ship-bars{display:flex;flex-direction:column;gap:6px;}"
+        ".ship-meter{display:flex;flex-direction:column;gap:3px;}"
+        ".ship-meter span{font-size:13px;color:#334155;line-height:1.2;}"
+        ".ship-meter-track{height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden;}"
+        ".ship-meter-fill{height:100%;border-radius:999px;}"
+        ".ship-meter-mood{background:#22c55e;}"
+        ".ship-meter-trust{background:#3b82f6;}"
         ".char-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}"
         ".char{min-height:180px;border-radius:10px;padding:10px 10px 12px;color:#fff;border:1px solid rgba(255,255,255,0.2);"
         "display:flex;flex-direction:column;justify-content:flex-end;box-shadow:inset 0 -40px 80px rgba(15,23,42,0.38);}"
