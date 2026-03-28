@@ -10,6 +10,7 @@
 			src: url("../fonts/HarmonyOS_Sans_Regular.ttf") format("truetype");
 			font-style: normal;
 			font-weight: 400;
+			font-stretch: 200%;
 			unicode-range: U+0030-0039;
 		}
 
@@ -18,6 +19,7 @@
 			src: url("../fonts/HarmonyOS_Sans_Medium.ttf") format("truetype");
 			font-style: normal;
 			font-weight: 700;
+			font-stretch: 200%;
 			unicode-range: U+0030-0039;
 		}
 
@@ -34,6 +36,28 @@
 			background-color: #0b1220;
 			overflow: hidden;
 			font-family: "HarmonySansDigits", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+		}
+
+		:root {
+			--digits-wide-scale: 1.12;
+		}
+
+		.profile-date,
+		.profile-uid,
+		.extra-card-number,
+		.region-overview-code,
+		.region-overview-level-number,
+		.operator-level-value,
+		.account-text-value {
+			display: inline-block;
+			transform: scaleX(var(--digits-wide-scale));
+			transform-origin: left center;
+		}
+
+		.region-overview-level-number,
+		.operator-level-value,
+		.account-text-value {
+			transform-origin: right center;
 		}
 
 		body::before {
@@ -237,6 +261,11 @@
 			height: 24px;
 			object-fit: contain;
 			flex: 0 0 auto;
+		}
+
+		.account-text-value {
+			margin-left: auto;
+			font-variant-numeric: tabular-nums;
 		}
 
 		.chapter-progress-card {
@@ -719,8 +748,8 @@
 		</section>
 		<section class="account-info-area">
 			<div class="section-marker"></div>
-			<div class="account-text-row"><img src="../img/权限等阶.png" alt="权限等阶图标" onerror="this.onerror=null;this.src='../权限等阶.png';" />权限等阶</div>
-			<div class="account-text-row"><img src="../img/探索等级.png" alt="探索等级图标" onerror="this.onerror=null;this.src='../探索等级.png';" />探索等级</div>
+			<div class="account-text-row"><img src="../img/权限等阶.png" alt="权限等阶图标" onerror="this.onerror=null;this.src='../权限等阶.png';" />权限等阶<span class="account-text-value" id="account-permission-level">00</span></div>
+			<div class="account-text-row"><img src="../img/探索等级.png" alt="探索等级图标" onerror="this.onerror=null;this.src='../探索等级.png';" />探索等级<span class="account-text-value" id="account-explore-level">00</span></div>
 			<div class="chapter-progress-card" id="chapter-progress-card">
 				<div class="top-left-accent"></div>
 				<img src="../img/主线图标.png" alt="主线图标" onerror="this.onerror=null;this.src='../主线图标.png';" />

@@ -428,26 +428,14 @@ def render_user_note_card(
         page_html = _replace_once(page_html, "<div class=\"avatar-placeholder\"></div>", avatar_html)
 
     page_html = re.sub(
-        r"<div class=\"account-text-row\"><img src=\"([^\"]*权限等阶\.png)\"[^>]*alt=\"权限等阶图标\"[^>]*/>权限等阶</div>",
-        (
-            "<div class=\"account-text-row\">"
-            "<img src=\"\\1\" alt=\"权限等阶图标\" />"
-            "权限等阶"
-            f"<span style=\"margin-left:auto;\">{level}</span>"
-            "</div>"
-        ),
+        r'<span\s+class="account-text-value"\s+id="account-permission-level">[\s\S]*?</span>',
+        f'<span class="account-text-value" id="account-permission-level">{level}</span>',
         page_html,
         count=1,
     )
     page_html = re.sub(
-        r"<div class=\"account-text-row\"><img src=\"([^\"]*探索等级\.png)\"[^>]*alt=\"探索等级图标\"[^>]*/>探索等级</div>",
-        (
-            "<div class=\"account-text-row\">"
-            "<img src=\"\\1\" alt=\"通行证等级图标\" />"
-            "通行证等级"
-            f"<span style=\"margin-left:auto;\">{bp_cur}</span>"
-            "</div>"
-        ),
+        r'<span\s+class="account-text-value"\s+id="account-explore-level">[\s\S]*?</span>',
+        f'<span class="account-text-value" id="account-explore-level">{bp_cur}</span>',
         page_html,
         count=1,
     )
