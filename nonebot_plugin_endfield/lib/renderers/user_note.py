@@ -272,7 +272,7 @@ def render_user_note_card(
         if icon_url:
             icon_html = f"<img src=\"{escape_text(icon_url)}\" alt=\"{safe_name}\" loading=\"lazy\" onerror=\"this.remove()\" />"
         else:
-            icon_html = f"<img src=\"https://bbs.hycdn.cn/image/2026/03/10/25b253bc7f352eacc7d08fce197198d2.png\" alt=\"{safe_name}\" />"
+            icon_html = ""
 
         medal_cards.append(
             f"<article class=\"road-item\"><div class=\"road-icon\">{icon_html}</div></article>"
