@@ -114,6 +114,7 @@ def render_user_note_card(
     local_role_id: str | None,
     local_server_id: str | None,
     spaceship_data: Dict[str, Any] | None = None,
+    domain_data: Dict[str, Any] | None = None,
 ) -> bytes:
     del spaceship_data
 
@@ -321,6 +322,73 @@ def render_user_note_card(
             "</div>"
         )
 
+    domain_payload = {}
+    if isinstance(domain_data, dict):
+        nested = domain_data.get("data")
+        if isinstance(nested, dict) and isinstance(nested.get("domain"), list):
+            domain_payload = nested
+        else:
+            domain_payload = domain_data
+    domain_list = domain_payload.get("domain") if isinstance(domain_payload.get("domain"), list) else []
+    valid_domains = [item for item in domain_list if isinstance(item, dict)][:2]
+    single_domain = len(valid_domains) == 1
+
+    def _parse_level_value(value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except Exception:
+            pass
+        m = re.search(r"-?\d+(?:\.\d+)?", text)
+        if not m:
+            return None
+        try:
+            return int(float(m.group(0)))
+        except Exception:
+            return None
+
+    domain_boxes: list[str] = []
+    for domain in valid_domains:
+        domain_level = _parse_level_value(domain.get("level"))
+        if domain_level is None:
+            domain_level = _parse_level_value(domain.get("domainLevel"))
+        if domain_level is None and isinstance(domain.get("domain"), dict):
+            domain_level = _parse_level_value(domain.get("domain", {}).get("level"))
+        if domain_level is None:
+            settlements = domain.get("settlements") if isinstance(domain.get("settlements"), list) else []
+            settlement_levels = [
+                level
+                for item in settlements
+                if isinstance(item, dict)
+                for level in [_parse_level_value(item.get("level"))]
+                if level is not None
+            ]
+            domain_level = max(settlement_levels) if settlement_levels else 0
+        domain_name = str(domain.get("name") or "未知地区")
+        box_style = " style=\"width:100%;\"" if single_domain else ""
+        domain_boxes.append(
+            f"<div class=\"region-overview-box\"{box_style}>"
+            f"<div class=\"region-overview-content\">"
+            f"<div class=\"region-overview-code\">00101.1010<br />00110.1010</div>"
+            f"<div class=\"region-overview-meta\">"
+            f"<div class=\"region-overview-level-row\">"
+            f"<span class=\"region-overview-level-label\">等级</span>"
+            f"<span class=\"region-overview-level-number\">{domain_level}</span>"
+            f"</div>"
+            f"<div class=\"region-overview-place\">{escape_text(domain_name)}</div>"
+            f"</div>"
+            f"</div>"
+            f"</div>"
+        )
+
     template_candidates = [
         assets_root / "templates" / "user_note.html",
         assets_root / "user_note.html",
@@ -413,6 +481,13 @@ def render_user_note_card(
     page_html = page_html.replace(
         ".operator-overlay-box:nth-child(2)::after {\n\t\t\t--accent-color: #efae03;\n\t\t}\n\n\t\t.operator-overlay-box:nth-child(3)::after,\n\t\t.operator-overlay-box:nth-child(4)::after {\n\t\t\t--accent-color: #9452fa;\n\t\t}",
         ".operator-overlay-box:nth-child(2)::after,\n\t\t.operator-overlay-box:nth-child(3)::after,\n\t\t.operator-overlay-box:nth-child(4)::after {\n\t\t\t--accent-color: inherit;\n\t\t}",
+    )
+
+    page_html = re.sub(
+        r'<div class="region-overview-boxes">[\s\S]*?</section>\s*<section class="right-gallery-area">',
+        f'<div class="region-overview-boxes">{"".join(domain_boxes)}</div>\n\t\t</section>\n\t\t<section class="right-gallery-area">',
+        page_html,
+        count=1,
     )
 
     return render_page_html_to_image(

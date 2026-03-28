@@ -17,10 +17,11 @@ user_card = on_command("终末地信息卡", aliases={"终末地名片", "终末
 def _render_note_card(
     note_data: dict[str, Any],
     spaceship_data: dict[str, Any] | None,
+    domain_data: dict[str, Any] | None,
     local_role_id: Optional[str],
     local_server_id: Optional[str],
 ) -> bytes:
-    return render_user_note_card(note_data, local_role_id, local_server_id, spaceship_data)
+    return render_user_note_card(note_data, local_role_id, local_server_id, spaceship_data, domain_data)
 
 
 @user_card.handle()
@@ -41,7 +42,7 @@ async def handle_user_card(event: Event):
         "X-API-Key": api_key,
         "X-Framework-Token": framework_token,
     }
-    note_data, spaceship_data = await asyncio.gather(
+    note_data, spaceship_data, domain_data = await asyncio.gather(
         api_request(
             "GET",
             "/api/endfield/note",
@@ -50,6 +51,11 @@ async def handle_user_card(event: Event):
         api_request(
             "GET",
             "/api/endfield/spaceship",
+            common_headers,
+        ),
+        api_request(
+            "GET",
+            "/api/endfield/domain",
             common_headers,
         ),
     )
@@ -62,11 +68,16 @@ async def handle_user_card(event: Event):
         logger.warning("get spaceship data failed, fallback to note only")
         spaceship_data = {}
 
+    if not isinstance(domain_data, dict) or domain_data.get("code") != 0:
+        logger.warning("get domain data failed, fallback to empty")
+        domain_data = {}
+
     try:
         image_bytes = await asyncio.to_thread(
             _render_note_card,
             note_data,
             spaceship_data,
+            domain_data,
             local_role_id,
             local_server_id,
         )
